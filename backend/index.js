@@ -1,12 +1,29 @@
+require('dotenv').config();
 const express = require("express"),
        app = express(),
        port = process.env.PORT || 3001,
        cors = require("cors");
 const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const Data = require('./taskModel'); // Importing the model once
 const fs = require("fs").promises;
 
 app.use(cors());
 app.use(bodyParser.json({ extended: true }));
+
+if (process.env.USE_MONGODB === 'true') {
+    console.log('Using MongoDB');
+    mongoose.connect(process.env.MONGO_URI, {
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+    });
+    const db = mongoose.connection;
+    db.on('error', console.error.bind(console, 'connection error:'));
+    db.once('open', () => {
+        console.log('Connected to MongoDB');
+    });
+}
+
 app.listen(port, () => console.log("Backend server live on " + port));
 
 app.get("/", (req, res) => {
@@ -29,12 +46,24 @@ async function addItem (request, response) {
           Due_date: dueDate
         }
 
-        const data = await fs.readFile("database.json");
-        const json = JSON.parse(data);
-        json.push(newTask);
-        await fs.writeFile("database.json", JSON.stringify(json))
-        console.log('Successfully wrote to file') 
-        response.sendStatus(200)
+        if (process.env.USE_MONGODB === 'true') {
+            console.log('Using MongoDB');
+
+            // Insert JSON data into MongoDB
+            const docs = await Data.create(newTask);
+            console.log('Successfully wrote to MongoDB', docs);
+            response.sendStatus(200);
+
+        } else {
+            console.log('Using JSON file');
+            const data = await fs.readFile("database.json");
+            const json = JSON.parse(data);
+            json.push(newTask);
+            await fs.writeFile("database.json", JSON.stringify(json))
+            console.log('Successfully wrote to file') 
+            response.sendStatus(200)
+        }
+
     } catch (err) {
         console.log("error: ", err)
         response.sendStatus(500)
